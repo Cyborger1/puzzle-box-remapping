@@ -1,13 +1,13 @@
-package com.example;
+package com.puzzleboxremapping;
 
 import net.runelite.client.RuneLite;
 import net.runelite.client.externalplugins.ExternalPluginManager;
 
-public class ExamplePluginTest
+public class PuzzleBoxRemappingPluginTest
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(ExamplePlugin.class);
+		ExternalPluginManager.loadBuiltin(PuzzleBoxRemappingPlugin.class);
 		RuneLite.main(args);
 	}
 }
