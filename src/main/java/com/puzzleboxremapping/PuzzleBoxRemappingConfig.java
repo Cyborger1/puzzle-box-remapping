@@ -4,16 +4,18 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
-@ConfigGroup("example")
+@ConfigGroup(PuzzleBoxRemappingConfig.CONFIG_GROUP)
 public interface PuzzleBoxRemappingConfig extends Config
 {
+	String CONFIG_GROUP = "puzzleboxremapping";
+	String INVERT_ARROW_KEYS_KEY = "invertArrowKeys";
 	@ConfigItem(
-		keyName = "greeting",
-		name = "Welcome Greeting",
-		description = "The message to show to the user when they login"
+		keyName = INVERT_ARROW_KEYS_KEY,
+		name = "Invert Arrow Keys",
+		description = "Inverts arrow key presses.<br>If off, the blank space moves with the keys.<br>If on, the tiles move onto the blank space."
 	)
-	default String greeting()
+	default boolean invertArrowKeys()
 	{
-		return "Hello";
+		return false;
 	}
 }
