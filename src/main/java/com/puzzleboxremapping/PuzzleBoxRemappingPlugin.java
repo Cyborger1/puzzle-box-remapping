@@ -20,7 +20,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Example"
+	name = "Puzzle Box Remapping"
 )
 public class PuzzleBoxRemappingPlugin extends Plugin
 {
@@ -36,12 +36,12 @@ public class PuzzleBoxRemappingPlugin extends Plugin
 	private static final int DOWN_ARROW_CODE = 99;
 
 	private static final ImmutableMap<Integer, Integer> INVERSE_KEY_MAP =
-			ImmutableMap.of(
-					LEFT_ARROW_CODE, RIGHT_ARROW_CODE,
-					RIGHT_ARROW_CODE, LEFT_ARROW_CODE,
-					UP_ARROW_CODE, DOWN_ARROW_CODE,
-					DOWN_ARROW_CODE, UP_ARROW_CODE
-			);
+		ImmutableMap.of(
+			LEFT_ARROW_CODE, RIGHT_ARROW_CODE,
+			RIGHT_ARROW_CODE, LEFT_ARROW_CODE,
+			UP_ARROW_CODE, DOWN_ARROW_CODE,
+			DOWN_ARROW_CODE, UP_ARROW_CODE
+		);
 
 	@Inject
 	private Client client;
@@ -52,48 +52,54 @@ public class PuzzleBoxRemappingPlugin extends Plugin
 	@Inject
 	private PuzzleBoxRemappingConfig config;
 
-	@Override
-	protected void startUp() throws Exception
-	{
-	}
-
-	@Override
-	protected void shutDown() throws Exception
-	{
-	}
-
-	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged)
-	{
-
-	}
-
 	@Provides
 	PuzzleBoxRemappingConfig provideConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(PuzzleBoxRemappingConfig.class);
 	}
 
+	@Override
+	protected void startUp() throws Exception
+	{
+		clientThread.invokeLater(() ->
+		{
+			setOnKeyListeners(true);
+			setOnKeyListeners(false);
+		});
+	}
+
+	@Override
+	protected void shutDown() throws Exception
+	{
+		clientThread.invokeLater(() -> setOnKeyListeners(true));
+	}
+
 	@Subscribe
 	private void onConfigChanged(ConfigChanged event)
 	{
+		/*
 		if (event.getGroup().equals(PuzzleBoxRemappingConfig.CONFIG_GROUP)
 			&& event.getKey().equals(PuzzleBoxRemappingConfig.INVERT_ARROW_KEYS_KEY))
 		{
-			clientThread.invokeLater(this::processPuzzleWidget);
+			clientThread.invokeLater(() ->
+			{
+				setOnKeyListeners(true);
+				setOnKeyListeners(false);
+			});
 		}
+		*/
 	}
 
 	@Subscribe
 	private void onScriptPostFired(ScriptPostFired event)
 	{
-		if (SCRIPT_IDS.contains(event.getScriptId()))
+		if (event.getScriptId() == 690)
 		{
-			processPuzzleWidget();
+			setOnKeyListeners(false);
 		}
 	}
 
-	private void processPuzzleWidget()
+	private void setOnKeyListeners(boolean clearListeners)
 	{
 		Widget puzzleBox = client.getWidget(WidgetInfo.PUZZLE_BOX);
 		if (puzzleBox == null)
@@ -101,96 +107,83 @@ public class PuzzleBoxRemappingPlugin extends Plugin
 			return;
 		}
 
-		// Find the missing piece
-		int missingIndex = -1;
 		for (int i = 0; i < MAX_INDEX; i++)
 		{
 			Widget tile = puzzleBox.getChild(i);
-			if (tile.isHidden())
+			if (clearListeners)
 			{
-				missingIndex = i;
+				tile.setOnKeyListener((Object[]) null);
 			}
-
-			tile.setOnKeyListener((Object[]) null);
+			else
+			{
+				final int index = i;
+				final Object[] onOpListener = tile.getOnOpListener();
+				// Op index needs to be 1
+				onOpListener[1] = 1;
+				// Component ID of the puzzle box
+				onOpListener[2] = puzzleBox.getId();
+				// Current child id
+				onOpListener[3] = index;
+				tile.setOnKeyListener((JavaScriptCallback) e ->
+				{
+					if (e.getTypedKeyCode() == getKeyCode(puzzleBox, index))
+					{
+						clientThread.invokeLater(() -> client.runScript(onOpListener));
+					}
+				});
+			}
 		}
-
-		// If didn't find the missing piece somehow, quit.
-		if (missingIndex == -1)
-		{
-			return;
-		}
-
-		AdjacentIndexes adj = getAdjacentIndexes(missingIndex);
-		if (adj == null)
-		{
-			return;
-		}
-
-		addCallback(puzzleBox, adj.getAbove(), UP_ARROW_CODE);
-		addCallback(puzzleBox, adj.getBelow(), DOWN_ARROW_CODE);
-		addCallback(puzzleBox, adj.getLeft(), LEFT_ARROW_CODE);
-		addCallback(puzzleBox, adj.getRight(), RIGHT_ARROW_CODE);
 	}
 
-	private void addCallback(Widget widget, int index, int keyCode)
-	{
-		if (widget == null || !isIndexValid(index))
-		{
-			return;
-		}
-
-		Widget tile = widget.getChild(index);
-		if (tile == null)
-		{
-			return;
-		}
-
-		final int key;
-		if (config.invertArrowKeys() && INVERSE_KEY_MAP.containsKey(keyCode))
-		{
-			key = INVERSE_KEY_MAP.get(keyCode);
-		}
-		else
-		{
-			key = keyCode;
-		}
-
-		final Object[] onOpListener = tile.getOnOpListener();
-		tile.setOnKeyListener((JavaScriptCallback) e ->
-		{
-			System.out.println(e.getTypedKeyCode());
-			if (e.getTypedKeyCode() == key) {
-				System.out.println("Doing the script");
-				clientThread.invokeLater(() -> client.runScript(onOpListener));
-			}
-		});
-	}
-
-	private static AdjacentIndexes getAdjacentIndexes(int index)
+	private static int getKeyCode(Widget puzzle, int index)
 	{
 		if (!isIndexValid(index))
 		{
-			return null;
+			return -1;
 		}
 
-		AdjacentIndexes.AdjacentIndexesBuilder builder = AdjacentIndexes.builder();
-
+		// Hidden is above
 		int v = index - DIMENSION_X;
-		builder.above(isIndexValid(v) ? v : -1);
+		if (isIndexValid(v) && puzzle.getChild(v).isHidden())
+		{
+			return DOWN_ARROW_CODE;
+		}
 
+		// Below
 		v = index + DIMENSION_X;
-		builder.below(isIndexValid(v) ? v : -1);
+		if (isIndexValid(v) && puzzle.getChild(v).isHidden())
+		{
+			return UP_ARROW_CODE;
+		}
 
-		builder.left(index % DIMENSION_X != 0 ? index - 1 : -1);
+		// On the left
+		if (index % DIMENSION_X != 0 && puzzle.getChild(index - 1).isHidden())
+		{
+			return RIGHT_ARROW_CODE;
+		}
 
+		// On the right
 		v = index + 1;
-		builder.right(v % DIMENSION_X != 0 ? v : -1);
+		if (v % DIMENSION_X != 0 && puzzle.getChild(v).isHidden())
+		{
+			return LEFT_ARROW_CODE;
+		}
 
-		return builder.build();
+		return -1;
+	}
+
+	private static int getKeyCode(Widget puzzle, int index, boolean invert)
+	{
+		int key = getKeyCode(puzzle, index);
+		if (key >= 0 && invert && INVERSE_KEY_MAP.containsKey(key))
+		{
+			key = INVERSE_KEY_MAP.get(key);
+		}
+		return key;
 	}
 
 	private static boolean isIndexValid(int index)
 	{
-		return index > 0 && index < MAX_INDEX;
+		return index >= 0 && index < MAX_INDEX;
 	}
 }
